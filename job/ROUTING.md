@@ -5,8 +5,8 @@ This file ships with Quartermaster and is generic. Your own rows, tiers for your
 ## How to read this table
 
 1. Find the task type row (none fits: use "Other").
-2. Small or medium work, or work that cannot be split: one agent on the Execute tier, then the Check. No split.
-3. Large and splittable: the Plan column says who writes the pieces; the Execute column the tier per piece; the Ceiling how far a piece may step up on its own; the Check the separate agent that verifies.
+2. Work that fits one agent's context (the normal case): one agent on the Execute tier, then the Check. No split.
+3. Work that cannot fit one context and splits: the Plan column says who writes the pieces; the Execute column the tier per piece; the Ceiling how far a piece may step up on its own; the Check the separate agent that verifies.
 4. The skill file (the gate) wins over this table on who plans; this table wins on tiers per task type; `ROUTING.local.md` wins over both.
 
 ## Tiers (cost rank, most expensive first)
@@ -58,8 +58,6 @@ Plugin and marketplace skills that are not files on this machine are not control
 
 ## Cost rules
 
-- Policy: a check one tier up costs less than redoing the piece on that tier, provided the check does not redo the work.
-- Policy: one escalation of one piece costs less than a weak result the user has to send back. Never let a cheap agent try harder; escalate.
-- Untested, to be measured by the paired benchmark: splitting pays only when each piece is far more than a few tool calls, because every agent starts with roughly 100,000 tokens on a typical setup of fixed context. Until measured, the gate in the skill file sends small and medium work to one agent.
-- True by construction: parallel agents save time, not tokens; each agent re-reads its inputs.
-- The honest baseline is one Opus agent doing the work pieces. The scorecard's net and running net use that baseline; the all-Fable figure is shown only as a reference estimate.
+- Measured (benchmark, October 2026, two file-reading tasks, two runs each): splitting across Haiku, Sonnet and Opus cost 1.9 and 2.8 times as much at list price as one Opus agent and took 2.7 and 3.8 times as long, because every piece re-reads the sources and starts with roughly 100,000 tokens of fixed context (an observation from this machine, not a benchmark figure). The gate in the skill file therefore sends every task that fits one context to one agent.
+- Policy, not measured: a separate check on every deliverable is kept because a wrong result costs more than a check; the benchmark also showed that a check is not a guarantee.
+- The honest baseline is one Opus agent doing the whole task, measured, not estimated from the pieces' tokens. The scorecard prints no saving line; a saving is claimed only from a benchmark run.

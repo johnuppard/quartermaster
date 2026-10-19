@@ -31,11 +31,11 @@ IDLE_CAP = 120.0  # a gap between two records in a transcript counts at most thi
 DEFAULT_THRESHOLD_TOKENS = 150000
 
 HELP_TEXT = """Quartermaster help
-- What it is for: large tasks that split into pieces. The pieces run in parallel on the cheapest model that does each one well. Everything else goes to one agent plus a check, so the only thing it adds is one check.
-- What it is meant to save, unmeasured until the benchmark in the repository shows it: tokens and time on large work, because mechanical pieces run on Sonnet and Haiku and independent pieces run at the same time. It does not save on small work, because every agent costs roughly 100,000 tokens on a typical setup of start-up context.
+- What it is for: a separate check on every deliverable, and a lean chat thread. Every task goes to one agent plus a check, so it adds only a check, a short handover and the foreman's few calls. Work is split across cheaper models only when it cannot fit one agent's context, because the benchmark measured splitting at two to three times the cost of one Opus agent on file-reading tasks.
+- What it costs: every agent carries roughly 100,000 tokens of start-up context on a typical setup, so small work goes to one agent plus a check. Routing was measured to cost more than one Opus agent on file-reading tasks; see benchmark/BENCHMARK.md in the repository.
 - Quality: every deliverable is checked by a separate agent. Quality is protected by that check and is never traded for tokens.
 - The lean thread: a handover is written at the end of every task, and a fresh chat is used when this one carries more than 150,000 tokens into every turn (the limit is context_threshold_tokens in config.json). Type /quartermaster resume to continue.
-- The scorecard: it prints tokens used by model (output is counted as at least), the overhead of planning, checks and the foreman, the net against one Opus agent doing the work, the time won, and the running net. Dollar figures are Anthropic API list-price estimates, not a bill. How your subscription weighs tokens is not published.
+- The scorecard: it prints tokens used by model (output is counted as at least), the overhead of planning, checks and the foreman, the list price of the run, the time won, and the totals recorded so far. It shows what was used and what it cost at list price. Dollar figures are Anthropic API list-price estimates, not a bill. How your subscription weighs tokens is not published.
 - Commands: /quartermaster <task>, /quartermaster review <task> (optional review, seven or more extra agents, waits for your yes), /quartermaster resume, /quartermaster help, /quartermaster lesson: <feedback>. Say "Fable for piece 2" to use the top model for one piece.
 - Limits: it cannot change the session model, and it does not fire by itself. You start it by typing /quartermaster.
 - Extras: the optional review and the daily self-review live in the repository's extras folder, with their cost stated. They are off unless installed.
@@ -591,12 +591,6 @@ def cmd_record(ctx, args):
     overhead = cost_plan + cost_check + foreman_cost
     run_total = cost_pieces + foreman_cost
     overhead_pct = (overhead * 100.0 / run_total) if run_total > 0 else 0.0
-    baseline = sum(p["priced"]["cost_opus"] for p in pieces
-                   if p["role"] in ("work", "assemble") and p["outcome"] == "done")
-    net = baseline - run_total
-    net_pct = (abs(net) * 100.0 / baseline) if baseline > 0 else 0.0
-    all_fable = sum(p["priced"]["cost_fable"] for p in pieces)
-    all_opus = sum(p["priced"]["cost_opus"] for p in pieces)
 
     # time
     active = sum(p["active"] for p in pieces if p["active"] is not None)
@@ -622,8 +616,6 @@ def cmd_record(ctx, args):
         "cost_pieces": round(cost_pieces, 6), "cost_plan": round(cost_plan, 6), "cost_checks": round(cost_check, 6),
         "cost_foreman": round(foreman_cost, 6), "foreman_found": foreman_found, "foreman_tokens": foreman_tokens,
         "overhead": round(overhead, 6), "overhead_pct": round(overhead_pct, 1), "run_total": round(run_total, 6),
-        "baseline_opus": round(baseline, 6), "net": round(net, 6),
-        "cost_all_fable": round(all_fable, 6), "cost_all_opus": round(all_opus, 6),
         "active_seconds": round(active, 1), "elapsed_seconds": round(elapsed, 1),
         "time_won_seconds": round(time_won, 1) if has_win else 0.0,
     }
@@ -638,15 +630,13 @@ def cmd_record(ctx, args):
             if not isinstance(sb, dict):
                 raise TypeError("not an object")
             runs_n = int(sb.get("runs", 0)) + 1
-            running = round(float(sb.get("running_net", 0.0)) + net, 6)
-            best = sb.get("best_run")
-            if not (isinstance(best, dict) and isinstance(best.get("net"), (int, float))):
-                best = None
-            if best is None or net > float(best["net"]):
-                best = {"net": round(net, 6), "task": args.task, "ts": run["ts"]}
+            tokens_n = int(sb.get("total_tokens", 0)) + total_tokens
+            price_n = round(float(sb.get("total_list_price", 0.0)) + run_total, 6)
         except (TypeError, ValueError, AttributeError) as e:
             raise QuartermasterError("scoreboard.json is damaged (%s): %s" % (e, sb_path))
-        sb["runs"], sb["running_net"], sb["best_run"], sb["updated"] = runs_n, running, best, run["ts"]
+        sb.pop("running_net", None)
+        sb.pop("best_run", None)
+        sb["runs"], sb["total_tokens"], sb["total_list_price"], sb["updated"] = runs_n, tokens_n, price_n, run["ts"]
         write_json_atomic(sb_path, sb)
         with open(str(ctx.runtime / "runs.jsonl"), "a", encoding="utf-8") as f:
             f.write(json.dumps(run, ensure_ascii=False) + "\n")
@@ -660,19 +650,13 @@ def cmd_record(ctx, args):
                   for t in ["opus", "sonnet", "haiku"] + (["fable"] if by_tier.get("fable") else []))))
     out.append("Overhead: plan %s, checks %s, foreman %s, together %s (%.0f%% of this run)." % (
         usd(cost_plan), usd(cost_check), usd(foreman_cost), usd(overhead), overhead_pct))
-    out.append("Baseline (estimate): the work pieces on one Opus agent, same tokens, %s." % usd(baseline))
-    if net >= 0:
-        out.append("Net against the baseline (estimate): saved %s (%.0f%%)" % (usd(net), net_pct))
-    else:
-        out.append("Net against the baseline (estimate): cost %s more (%.0f%%)" % (usd(-net), net_pct))
+    out.append("List price of this run (estimate, not a bill): %s" % usd(run_total))
     if has_win:
         out.append("Time won: %.1f minutes (active %.1f, elapsed %.1f)" % (time_won / 60.0, active / 60.0, elapsed / 60.0))
     else:
         out.append("No time won (under a minute)")
-    out.append("Running net (estimates): %s over %s. Best run: %s (%s)." % (
-        usd(running), plural(runs_n, "run"), usd(best["net"]), clean(best["task"])))
-    out.append("How your subscription weighs these tokens is not published. Dollars are Anthropic API list-price estimates, not a bill.")
-    out.append("For reference (estimates): all pieces on Fable %s, all on Opus %s." % (usd(all_fable), usd(all_opus)))
+    out.append("Recorded so far: %s, {:,} tokens, %s at list price.".format(tokens_n) % (plural(runs_n, "run"), usd(price_n)))
+    out.append("How your subscription weighs these tokens is not published. Routing was measured to cost more than one Opus agent on file-reading tasks; see benchmark/BENCHMARK.md.")
     print("\n".join(out))
     return 0
 
