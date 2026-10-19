@@ -128,7 +128,14 @@ The question: for a large, splittable task, does routing it through Quartermaste
 
 The rules in brief: the same task sentence for both arms, saved before either run; the baseline is one fresh Opus agent, start-up cost counted; the routed arm runs exactly as the skill says, with every agent and the foreman counted; a blind Opus judge scores both results; at least two runs per arm per task, and at least two tasks, before any number is published; tokens are counted from the transcripts with the same rules as `record`.
 
-Results: none yet. The full method is in [benchmark/BENCHMARK.md](benchmark/BENCHMARK.md).
+Results of the first run (October 2026, two tasks, two runs per arm, [full table](benchmark/results/2026-10-19/RESULTS.md)):
+
+| Task | Baseline, median | Routed, median | Quality (blind judges) |
+|---|---|---|---|
+| Consolidation recommendation for 36 skills | $2.09, 3.3M tokens, 4.4 min | $4.03, 9.5M tokens, 11.9 min | Routed better in both runs |
+| README and manifest audit of 54 plugins | $2.36, 4.1M tokens, 5.6 min | $6.58, 20.0M tokens, 21.2 min | Baseline better in one run, undecided in the other |
+
+What this shows: on these two tasks routing did not save tokens, money or time. It cost 87% to 192% more than one Opus agent, and took two to four times as long. Quality was better on the first task and not better on the second. The scorecard's own "net against the baseline" estimate printed "saved" in every routed run, while the measured single agent was cheaper every time, so that estimate is not evidence of a saving. Two tasks of one kind are not a general result. The full method is in [benchmark/BENCHMARK.md](benchmark/BENCHMARK.md).
 
 ## Limits, stated plainly
 

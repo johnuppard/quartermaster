@@ -31,4 +31,9 @@ A table per task and run: tokens by model and arm, list-price estimate, elapsed 
 
 ## Results
 
-None yet.
+First run, 19 and 20 October 2026: [results/2026-10-19/RESULTS.md](results/2026-10-19/RESULTS.md).
+
+- Task 1 (consolidation recommendation for 36 skills): routing cost more, $4.03 against $2.09 at list price (median, 93% more), with 2.9 times the tokens and 2.7 times the elapsed time. Quality: better, routed preferred by both judges in both runs.
+- Task 2 (README and manifest audit of 54 plugins): routing cost more, $6.58 against $2.36 (median, 179% more), with 4.9 times the tokens and 3.8 times the elapsed time. Quality: not better, baseline preferred by both judges in run 1, undecided in run 2.
+
+No saving of tokens, money or time was shown. The deviations from this method (public material instead of private folders, the foreman above its context threshold, a duplicate session in task 2 run 1, second judges on tied criteria) are listed in the results file.
