@@ -1,0 +1,17 @@
+{
+  "_comment": "Keys read by the daily self-review. install.sh merges missing keys into ~/.claude/quartermaster/config.json and never overwrites a value you set. notify_command is a shell command run when the self-review has something to tell you. It receives two environment variables: SUBJECT (one line) and BODY_FILE (path to a text file with the message: the full report after a run, or a short notice). The body is in the report file, so a notification only needs to point to it. Leave notify_command empty to get no notification; the report file is then the only record. Example for macOS: osascript -e 'display notification \"Quartermaster wrote a new report\" with title \"'\"$SUBJECT\"'\"'  Example for email, using any mail command you already have: mail -s \"$SUBJECT\" you@example.com < \"$BODY_FILE\"",
+  "notify_command": "",
+  "run_hour": 10,
+  "max_minutes": 20,
+  "model_review": "claude-sonnet-5-5",
+  "model_decide": "claude-opus-5-5",
+  "correction_words": [
+    "wrong",
+    "redo",
+    "not what I asked"
+  ],
+  "claude_path": "~/.local/bin/claude",
+  "skip_project_folders": ["quartermaster"],
+  "forbid_dashes": false,
+  "default_tier": "opus"
+}

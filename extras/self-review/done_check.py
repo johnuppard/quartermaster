@@ -17,9 +17,9 @@ Usage:
 
     done_check.py manifest --out <file> [--home <path>]
         Write sha256 of: every installed SKILL.md with its `model:` line removed, Quartermaster's own skill file,
-        and in the home folder run_headless.py, JOB.md, ROUTING.md, prices.json, quartermaster.py,
-        collect_evidence.py, done_check.py, snapshot_skill_models.py, config.json (it holds the
-        notify command), plus on macOS the plist ~/Library/LaunchAgents/com.quartermaster.daily.plist (env
+        in the home folder ROUTING.md, prices.json, quartermaster.py, config.json (it holds the
+        notify command), and in this script's own folder run_headless.py, JOB.md, collect_evidence.py,
+        done_check.py, snapshot_skill_models.py, setup_job.py, plus on macOS the plist ~/Library/LaunchAgents/com.quartermaster.daily.plist (env
         QUARTERMASTER_PLIST overrides the path) and elsewhere the lines of `crontab -l` that contain "quartermaster"
         (key "crontab"; env QUARTERMASTER_CRONTAB_TEXT replaces the crontab output, for tests).
         A file that is absent has sha256 null.
@@ -47,8 +47,9 @@ import snapshot_skill_models as ssm  # noqa: E402  (same folder)
 DEFAULT_HOME = Path(os.environ.get('QUARTERMASTER_HOME', str(Path.home() / '.claude' / 'quartermaster'))).expanduser()
 DEFAULT_SKILLS = Path.home() / '.claude' / 'skills'
 DEFAULT_PLIST = Path.home() / 'Library' / 'LaunchAgents' / 'com.quartermaster.daily.plist'
-HOME_FILES = ['run_headless.py', 'JOB.md', 'ROUTING.md', 'prices.json', 'quartermaster.py', 'collect_evidence.py',
-              'done_check.py', 'snapshot_skill_models.py', 'config.json']
+HOME_FILES = ['ROUTING.md', 'prices.json', 'quartermaster.py', 'config.json']
+SELF_FILES = ['run_headless.py', 'JOB.md', 'collect_evidence.py', 'done_check.py', 'snapshot_skill_models.py',
+              'setup_job.py']
 TIER_WORDS = {'fable', 'opus', 'sonnet', 'haiku', 'tier', 'skill', 'skills', 'name', 'model'}
 EM = chr(0x2014)
 EN = chr(0x2013)
@@ -117,6 +118,9 @@ def build_manifest(home, skills_dir):
     for name in HOME_FILES:
         f = home / name
         files['home/' + name] = {'path': str(f), 'sha256': sha_of(f), 'strip_model': False}
+    for name in SELF_FILES:
+        f = HERE / name
+        files['self-review/' + name] = {'path': str(f), 'sha256': sha_of(f), 'strip_model': False}
     if sys.platform == 'darwin':
         pl = plist_path()
         files['plist'] = {'path': str(pl), 'sha256': sha_of(pl), 'strip_model': False}
@@ -279,7 +283,7 @@ def load_config(home):
 
 def check_e(home, skills_dir, report_date):
     home = Path(home)
-    files = [home / 'JOB.md', home / 'ROUTING.md', Path(skills_dir) / 'quartermaster' / 'SKILL.md']
+    files = [HERE / 'JOB.md', home / 'ROUTING.md', Path(skills_dir) / 'quartermaster' / 'SKILL.md']
     scope = 'shipped files'
     if load_config(home).get('forbid_dashes') is True:
         files += [home / 'ROUTING.local.md', home / 'LESSONS.md', home / 'runtime' / 'reports' / (report_date + '.md')]

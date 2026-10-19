@@ -12,6 +12,8 @@ Started by launchd (or cron) once a day. Does the mechanical work itself and onl
            state (OK as last output line advances last_run) -> report -> notify -> log
 
 Usage:   run_headless.py [--home <path>]        (default ~/.claude/quartermaster)
+         The scripts and JOB.md live in their own folder (extras/self-review); the home folder holds
+         config.json, LESSONS.md, ROUTING files and runtime/.
 Test:    QUARTERMASTER_DRY_RUN=1 prints what every path would do and writes no state, no report, no ledger line,
          no backup, and starts no claude and sends nothing; it prints the command it would run.
          QUARTERMASTER_LIMIT_S=<seconds> overrides the time limit (tests only).
@@ -133,7 +135,7 @@ def save_state(ctx, **changes):
 # ---------------------------------------------------------------- scripts and manifest
 
 def load_helpers(home):
-    scripts = home if (home / 'done_check.py').exists() else HERE
+    scripts = HERE
     sys.path.insert(0, str(scripts))
     import collect_evidence as ce  # noqa: E402
     import done_check as dc  # noqa: E402
@@ -257,6 +259,7 @@ def model_section(job_text):
 
 def build_prompt(ctx, section):
     h = ctx.home
+    s = HERE
     date = ctx.date
     lines = [
         "This is an unattended scheduled run of Quartermaster's daily self-review. Nobody can answer questions.",
@@ -265,7 +268,7 @@ def build_prompt(ctx, section):
         '',
         'Paths (all absolute; use exactly these):',
         '- Home folder: %s' % h,
-        '- Job description: %s/JOB.md' % h,
+        '- Job description: %s/JOB.md' % s,
         '- Shipped routing table (read only): %s/ROUTING.md' % h,
         '- The user\'s routing rows (you may change): %s/ROUTING.local.md (create it only if you must write to it)' % h,
         '- Lessons (you may change, 30 lines max): %s/LESSONS.md' % h,
@@ -278,8 +281,8 @@ def build_prompt(ctx, section):
         '- Installed skills: %s' % ctx.skills_dir,
         '',
         'Commands you use (they take --home):',
-        '- python3 %s/done_check.py --home %s --manifest-before %s' % (h, h, ctx.manifest_before),
-        '- python3 %s/snapshot_skill_models.py --home %s --diff | --write | --restore <skill>' % (h, h),
+        '- python3 %s/done_check.py --home %s --manifest-before %s' % (s, h, ctx.manifest_before),
+        '- python3 %s/snapshot_skill_models.py --home %s --diff | --write | --restore <skill>' % (s, h),
     ]
     if str(ctx.skills_dir) != str(DEFAULT_SKILLS):
         lines.append('  (add --skills-dir %s to both scripts)' % ctx.skills_dir)
@@ -619,8 +622,8 @@ def run_locked(ctx):
         return finish(ctx, 'quiet')
 
     # 6. the model run
-    job_text = (ctx.home / 'JOB.md').read_text(encoding='utf-8', errors='replace') \
-        if (ctx.home / 'JOB.md').is_file() else ''
+    job_text = (HERE / 'JOB.md').read_text(encoding='utf-8', errors='replace') \
+        if (HERE / 'JOB.md').is_file() else ''
     section = model_section(job_text)
     if not section:
         return finish(ctx, 'failed', 'JOB.md has no section "%s"' % MODEL_SECTION)
@@ -628,7 +631,10 @@ def run_locked(ctx):
     prompt = build_prompt(ctx, section)
     write_atomic(ctx.runtime / 'last-prompt.txt', prompt)
     claude = find_claude(ctx.cfg)
-    allowed = ['Bash(python3 %s/*)' % ctx.home] + ALLOWED_TOOLS_STATIC
+    allowed = ['Bash(python3 %s/*)' % ctx.home]
+    if not str(HERE).startswith(str(ctx.home) + os.sep):
+        allowed.append('Bash(python3 %s/*)' % HERE)
+    allowed += ALLOWED_TOOLS_STATIC
     cmd = [claude or 'claude', '-p', prompt, '--model', ctx.model, '--max-turns', '60',
            '--permission-mode', 'dontAsk', '--allowedTools'] + allowed
     out = ''

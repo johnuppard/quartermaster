@@ -12,7 +12,7 @@ This file is yours. Setup copies it to `ROUTING.local.md` if that file is missin
 
 ## Skills by tier
 
-The daily self-review adds new skills here. One line per tier, skill names separated by commas.
+Only the optional self-review extra (extras/self-review) reads and writes this section; without it, ignore it. One line per tier, skill names separated by commas.
 
 - fable (yours):
 - opus:
@@ -20,4 +20,4 @@ The daily self-review adds new skills here. One line per tier, skill names separ
 
 ## Notes
 
-The daily self-review writes its tier changes here, with the date.
+The optional self-review writes its tier changes here, with the date.

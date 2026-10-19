@@ -7,7 +7,7 @@ Writes <home>/runtime/evidence.json with these lists for the window (since, unti
     switches     hand /model switches to a tier above config default_tier (model id from <command-args>;
                  each carries followed_by: the first user message within 30 minutes in the same session)
     routed_runs  lines of runtime/runs.jsonl in the window
-    escalations  pieces of those runs that escalated (escalated_to)
+    escalations  pieces of those runs that escalated (outcome "escalated"; old records: escalated_to)
     corrections  flags only: the user's next message after a routed run (same working directory,
                  within 60 minutes) that contains a correction word. Never counted automatically.
     drift        snapshot_skill_models.py --diff (dropped, changed, new, removed)
@@ -341,6 +341,11 @@ def read_runs(path, since, until):
     return runs
 
 
+def is_escalated(p):
+    """A piece escalated when its outcome is "escalated" (current records) or it names escalated_to (old ones)."""
+    return str(p.get('outcome') or '').lower() == 'escalated' or bool(p.get('escalated_to'))
+
+
 def summarise_runs(runs):
     routed, escalations = [], []
     for dt, has_time, rec in runs:
@@ -356,12 +361,12 @@ def summarise_runs(runs):
                           'model': p.get('model'), 'tokens': tok, 'seconds': p.get('seconds'),
                           'escalated_to': p.get('escalated_to') or None,
                           'outcome': p.get('outcome')})
-            if p.get('escalated_to'):
+            if is_escalated(p):
                 escalations.append({
                     'ts': iso(dt), 'date': local_date(dt), 'task': snippet(rec.get('task'), 120),
                     'task_type': rec.get('type'), 'piece': snippet(p.get('piece') or p.get('name') or '', 80),
                     'from': p.get('model'), 'from_tier': tier_of(p.get('model')),
-                    'to': p.get('escalated_to'), 'to_tier': tier_of(p.get('escalated_to')),
+                    'to': p.get('escalated_to') or None, 'to_tier': tier_of(p.get('escalated_to')),
                     'reason': snippet(p.get('escalation_reason') or p.get('reason') or '', 200),
                     'run_outcome': rec.get('outcome')})
         routed.append({'ts': iso(dt), 'time_known': has_time, 'task': snippet(rec.get('task'), 120),
@@ -413,9 +418,10 @@ def execute_tier(rec):
         if t:
             return t
     best, best_key = None, None
-    for p in rec.get('pieces') or []:
-        if not isinstance(p, dict):
-            continue
+    pieces = [p for p in (rec.get('pieces') or []) if isinstance(p, dict)]
+    # the tier the work ran on: pieces with role work or assemble; old records have no roles, so all pieces
+    worked = [p for p in pieces if str(p.get('role') or '').lower() in ('work', 'assemble')]
+    for p in (worked or pieces):
         t = tier_of(p.get('model'))
         if not t:
             continue
@@ -426,7 +432,7 @@ def execute_tier(rec):
 
 
 def clean_runs(runs, lo, hi, corrections):
-    """Runs in (lo, hi] with no escalation and no correction flag, with the tier they ran on.
+    """Runs in (lo, hi] with every piece done, no escalation and no correction flag, with the tier they ran on.
     hi is until minus 60 minutes, so a correction that comes within an hour is already seen."""
     flagged = set(c['run_ts'] for c in corrections)
     out = []
@@ -434,7 +440,8 @@ def clean_runs(runs, lo, hi, corrections):
         if not (lo < dt <= hi):
             continue
         pieces = [p for p in (rec.get('pieces') or []) if isinstance(p, dict)]
-        if any(p.get('escalated_to') for p in pieces) or iso(dt) in flagged:
+        if iso(dt) in flagged or any(is_escalated(p) for p in pieces) \
+                or not all(str(p.get('outcome') or '').lower() == 'done' for p in pieces):
             continue
         tier = execute_tier(rec)
         if not tier:
@@ -483,7 +490,7 @@ def propose_lower_items(ledger_path, clean):
 def run_drift(home, skills_dir):
     script = Path(__file__).resolve().parent / 'snapshot_skill_models.py'
     if not script.exists():
-        script = Path(home) / 'snapshot_skill_models.py'
+        script = Path(home) / 'extras' / 'self-review' / 'snapshot_skill_models.py'
     cmd = [sys.executable, str(script), '--home', str(home), '--skills-dir', str(skills_dir), '--diff']
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
@@ -515,7 +522,7 @@ def build_events(lessons, switches, escalations, corrections, drift, until, clea
                                      (' | next message: ' + s['followed_by'][:100]) if s.get('followed_by') else ''))
     for e in escalations:
         add(e['date'], 'escalation', e['task_type'], e['from_tier'], e['to_tier'],
-            '%s %s: piece %s %s -> %s: %s' % (e['ts'], e['task_type'], e['piece'], e['from'], e['to'], e['reason']))
+            '%s %s: piece %s %s -> %s: %s' % (e['ts'], e['task_type'], e['piece'], e['from'], e['to'] or 'next tier', e['reason']))
     for c in corrections:
         add(c['date'], 'correction', c['task_type'], None, None,
             '%s %s | next message %s: %s' % (c['run_ts'], c['task'][:80], c['message_ts'], c['message']))
